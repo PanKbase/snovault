@@ -201,27 +201,38 @@ def collection_add(context, request, render=None):
         # This ensures links are converted from paths to UUIDs
         from .schema_utils import validate
         # Run validation to normalize links (paths to UUIDs) and apply defaults
+        logger.info(f'Running validation for {context.type_info.name} with data keys: {list(request.json.keys())}')
         validated, errors = validate(context.type_info.schema, request.json)
+        logger.info(f'Validation result: validated has {len(validated) if validated else 0} keys, {len(errors)} errors')
+        
         # Filter errors - ignore requestMethod/permission errors for fields like schema_version
         # These are non-critical and shouldn't prevent POST from working
-        from jsonschema.exceptions import ValidationError
         critical_errors = []
         for error in errors:
-            error_msg = str(error) if hasattr(error, 'message') else str(error)
+            error_msg = error.message if hasattr(error, 'message') else str(error)
             # Ignore requestMethod and permission errors (these are expected for admin-only fields)
             if 'requestMethod' not in error_msg and 'permission' not in error_msg.lower():
                 critical_errors.append(error)
             # Add all errors to request.errors for logging
             if hasattr(request, 'errors'):
                 error_path = list(error.path) if hasattr(error, 'path') else []
-                error_message = error.message if hasattr(error, 'message') else str(error)
-                request.errors.add('body', error_path, error_message)
+                request.errors.add('body', error_path, error_msg)
+        
         # Use validated data (with normalized links) even if there are non-critical errors
         # This ensures links are converted from paths to UUIDs
         if validated:
+            logger.info(f'Updating request.validated with keys: {list(validated.keys())}')
+            # Check if links were normalized
+            for key, value in validated.items():
+                if 'award' in key.lower() or 'lab' in key.lower():
+                    logger.info(f'Link field {key}: {value} (type: {type(value)})')
             request.validated.update(validated)
+        else:
+            logger.error(f'Validation returned empty validated data! Errors: {errors}')
+        
         # Only raise if there are critical validation errors and no validated data
         if critical_errors and not request.validated:
+            logger.error(f'Critical validation errors: {critical_errors}')
             from .validation import ValidationFailure
             raise ValidationFailure(request.errors if hasattr(request, 'errors') else critical_errors)
 

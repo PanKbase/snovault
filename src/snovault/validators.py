@@ -7,6 +7,9 @@ from .validation import ValidationFailure
 
 
 def no_validate_item_content_post(context, request):
+    # Ensure request.validated is initialized
+    if not hasattr(request, 'validated'):
+        request.validated = {}
     data = request.json
     request.validated.update(data)
 
@@ -34,6 +37,9 @@ def no_validate_item_content_patch(context, request):
 
 
 def validate_item_content_post(context, request):
+    # Ensure request.validated is initialized
+    if not hasattr(request, 'validated'):
+        request.validated = {}
     data = request.json
     validate_request(context.type_info.schema, request, data)
 

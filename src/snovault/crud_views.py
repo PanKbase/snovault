@@ -183,6 +183,26 @@ def collection_add(context, request, render=None):
     if render is None:
         render = request.params.get('render', True)
 
+    # Ensure request.validated exists and was populated by validator
+    # If validator ran but had errors, Pyramid should have returned 422 before we get here
+    # If we get here with empty validated, the validator likely didn't run
+    if not hasattr(request, 'validated'):
+        from pyramid.httpexceptions import HTTPBadRequest
+        raise HTTPBadRequest(
+            detail='Request validation failed. Validator did not run.'
+        )
+    # Check if validation actually populated data (not just empty dict)
+    # Empty dict means validator ran but validation failed (should have been caught earlier)
+    if not request.validated:
+        # Check if there were validation errors that should have been caught
+        if hasattr(request, 'errors') and request.errors:
+            # This shouldn't happen - Pyramid should catch validation errors
+            # But if it does, we should not create an empty object
+            from pyramid.httpexceptions import HTTPBadRequest
+            raise HTTPBadRequest(
+                detail='Request validation failed. Validation errors occurred but were not properly handled.'
+            )
+
     item = create_item(context.type_info, request, request.validated)
 
     if render == 'uuid':

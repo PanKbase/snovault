@@ -187,18 +187,43 @@ def collection_add(context, request, render=None):
     # This is a safety check in case validator didn't run or didn't initialize it
     if not hasattr(request, 'validated'):
         request.validated = {}
-    # If validated is empty, try to use request.json as fallback
+    # If validated is empty, try to validate request.json as fallback
     # This handles cases where validator ran but didn't populate validated
-    # This allows POSTs to work even if validator has issues
+    # We need to validate to normalize links (paths to UUIDs) and apply defaults
     if not request.validated and hasattr(request, 'json') and request.json:
         import logging
         logger = logging.getLogger(__name__)
         logger.warning(
             f'POST to {context.type_info.name}: request.validated is empty, '
-            f'using request.json as fallback. Validator may not have run properly.'
+            f'running validation as fallback. Validator may not have run properly.'
         )
-        # Fallback: use request.json directly if validated is empty
-        request.validated = request.json.copy()
+        # Fallback: validate request.json to normalize links and apply defaults
+        # This ensures links are converted from paths to UUIDs
+        from .schema_utils import validate
+        # Run validation to normalize links (paths to UUIDs) and apply defaults
+        validated, errors = validate(context.type_info.schema, request.json)
+        # Filter errors - ignore requestMethod/permission errors for fields like schema_version
+        # These are non-critical and shouldn't prevent POST from working
+        from jsonschema.exceptions import ValidationError
+        critical_errors = []
+        for error in errors:
+            error_msg = str(error) if hasattr(error, 'message') else str(error)
+            # Ignore requestMethod and permission errors (these are expected for admin-only fields)
+            if 'requestMethod' not in error_msg and 'permission' not in error_msg.lower():
+                critical_errors.append(error)
+            # Add all errors to request.errors for logging
+            if hasattr(request, 'errors'):
+                error_path = list(error.path) if hasattr(error, 'path') else []
+                error_message = error.message if hasattr(error, 'message') else str(error)
+                request.errors.add('body', error_path, error_message)
+        # Use validated data (with normalized links) even if there are non-critical errors
+        # This ensures links are converted from paths to UUIDs
+        if validated:
+            request.validated.update(validated)
+        # Only raise if there are critical validation errors and no validated data
+        if critical_errors and not request.validated:
+            from .validation import ValidationFailure
+            raise ValidationFailure(request.errors if hasattr(request, 'errors') else critical_errors)
 
     item = create_item(context.type_info, request, request.validated)
 

@@ -282,7 +282,7 @@ class Item(Resource):
 
     def unique_keys(self, properties):
         return {
-            name: [v for prop in props for v in ensurelist(properties.get(prop, ()))]
+            name: [v for prop in props for v in ensurelist(properties.get(prop) or ())]
             for name, props in self.type_info.schema_keys.items()
         }
 

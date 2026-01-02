@@ -1,5 +1,4 @@
 from functools import partial
-import logging
 
 from pyramid.httpexceptions import HTTPConflict
 from sqlalchemy import (
@@ -222,17 +221,7 @@ class RDBStorage(object):
         session = self.DBSession()
         source = model.rid
 
-        # Filter out invalid UUIDs to prevent ValueError
-        rels = set()
-        for k, targets in links.items():
-            for target in targets:
-                if target:  # Skip None and empty strings
-                    try:
-                        rels.add((k, uuid.UUID(target)))
-                    except (ValueError, TypeError, AttributeError):
-                        # Skip invalid UUID strings - log warning if needed
-                        logger = logging.getLogger(__name__)
-                        logger.warning(f"Skipping invalid UUID in link '{k}': {target}")
+        rels = {(k, uuid.UUID(target)) for k, targets in links.items() for target in targets}
 
         existing = {
             (link.rel, link.target_rid)

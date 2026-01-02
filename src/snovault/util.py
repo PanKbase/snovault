@@ -14,6 +14,8 @@ def get_root_request():
 
 
 def ensurelist(value):
+    if value is None:
+        return []
     if isinstance(value, basestring):
         return [value]
     return value
